@@ -23,7 +23,7 @@ class NIOServer: Runnable, AutoCloseable {
      * Marker byte for end of a single message in a stream.
      */
     @JvmStatic
-    val END_MESSAGE_MARKER: Byte = 0
+    val END_MESSAGE_MARKER: Byte = 0x00
   }
 
   private val serverSocket: ServerSocketChannel
