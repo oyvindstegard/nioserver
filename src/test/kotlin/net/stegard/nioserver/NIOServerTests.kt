@@ -10,6 +10,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class NIOServerTests {
 
+  val D_500MS = Duration.ofMillis(500)
+
   @Test
   fun `multiple messages single client`() {
     NIOServer().use { server ->
@@ -28,15 +30,15 @@ class NIOServerTests {
         client.write("Fin".toByteArray(UTF_8))
       }
 
-      assertEquals("Hello server", server.takeMessage(Duration.ofMillis(500)))
-      assertEquals("How are you ? Good ?", server.takeMessage(Duration.ofMillis(500)))
-      assertEquals("Fine", server.takeMessage(Duration.ofMillis(500)))
-      assertEquals("thank you☺", server.takeMessage(Duration.ofMillis(500)))
-      assertEquals("", server.takeMessage(Duration.ofMillis(500)))
-      assertEquals("", server.takeMessage(Duration.ofMillis(500)))
-      assertEquals("", server.takeMessage(Duration.ofMillis(500)))
-      assertEquals("Fin", server.takeMessage(Duration.ofMillis(500)))
-      assertNull(server.takeMessage(Duration.ofMillis(500)))
+      assertEquals("Hello server", server.takeMessage(D_500MS))
+      assertEquals("How are you ? Good ?", server.takeMessage(D_500MS))
+      assertEquals("Fine", server.takeMessage(D_500MS))
+      assertEquals("thank you☺", server.takeMessage(D_500MS))
+      assertEquals("", server.takeMessage(D_500MS))
+      assertEquals("", server.takeMessage(D_500MS))
+      assertEquals("", server.takeMessage(D_500MS))
+      assertEquals("Fin", server.takeMessage(D_500MS))
+      assertNull(server.takeMessage(D_500MS))
 
       assertEquals(8, server.messageReceptionCount())
     }
@@ -119,8 +121,8 @@ class NIOServerTests {
 
   @Test
   fun `threaded multiple clients two messages each`() {
-    val numClients = 1000
-    NIOServer(receiveBufferSize = 1024, messageStoreCapacity = 3000).use { server ->
+    val numClients = 2000
+    NIOServer(receiveBufferSize = 1024, messageStoreCapacity = 5000).use { server ->
 
       val clientCompletedCount = AtomicInteger(0)
 
@@ -140,18 +142,21 @@ class NIOServerTests {
 
       val threads = clientRunnables.map { Thread(it) }
       println("Starting ${threads.size} client threads ..")
-      threads.forEach { it.start() }
+      threads.forEach {
+        it.start()
+      }
       println("Waiting for client threads ..")
       threads.forEach { it.join() }
-      println("Done.")
 
+      val maxTimeToGetAllMessages = Duration.ofSeconds(30)
+      val start = System.currentTimeMillis()
       var msgCount = 0
-      while (server.takeMessage(Duration.ofMillis(500)) != null) {
-        msgCount += 1
+      while (msgCount < numClients*2 && (System.currentTimeMillis() - start) < maxTimeToGetAllMessages.toMillis()) {
+        msgCount += if (server.takeMessage(D_500MS) != null) 1 else 0
       }
 
-      assertEquals(1000, clientCompletedCount.get(), "Expected 1000 clients to have successfully completed sending")
-      assertEquals(2000, msgCount, "Expect 2000 messages, 2 from each of 1000 clients")
+      assertEquals(numClients, clientCompletedCount.get(), "Expected ${numClients} clients to have successfully completed sending")
+      assertEquals(numClients*2, msgCount, "Expect ${numClients*2} messages, 2 from each of ${numClients} clients")
       assertEquals(msgCount.toLong(), server.messageReceptionCount(), "Stored message count not equal to total server message count")
     }
 

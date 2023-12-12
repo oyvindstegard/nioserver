@@ -35,13 +35,14 @@ class NIOServer: Runnable, AutoCloseable {
   constructor(host: String = "localhost",
               port: Int = 0,
               receiveBufferSize: Int = 32 * 1024,
-              messageStoreCapacity: Int = 1024) {
+              messageStoreCapacity: Int = 1024,
+              acceptBacklog: Int = 100000) {
 
     recvBufSize = receiveBufferSize
     messages = ArrayBlockingQueue(messageStoreCapacity)
     selector = Selector.open()
     serverSocket = ServerSocketChannel.open().apply {
-      bind(InetSocketAddress(host, port))
+      bind(InetSocketAddress(host, port), acceptBacklog)
       configureBlocking(false)
       register(selector, SelectionKey.OP_ACCEPT)
     }
@@ -53,6 +54,7 @@ class NIOServer: Runnable, AutoCloseable {
       start()
     }
 
+    log("NIOServer started on port ${getPort()}")
   }
 
   /**
@@ -81,7 +83,7 @@ class NIOServer: Runnable, AutoCloseable {
    */
   fun messageReceptionCount() = messageReceptionCount.get()
 
-  private fun log(message: String) = println("NIOServer: ${message}")
+  private fun log(message: String) = println("${Thread.currentThread().name}: ${message}")
 
   private fun storeMessage(buffer: ByteBuffer) {
     messageReceptionCount.incrementAndGet()
@@ -99,6 +101,9 @@ class NIOServer: Runnable, AutoCloseable {
     val buffer = attachment() as ByteBuffer
     try {
       val read = channel.read(buffer)
+      if (read == 0) {
+        return
+      }
 
       var i = 0
       while (i < buffer.position()) {
@@ -118,8 +123,8 @@ class NIOServer: Runnable, AutoCloseable {
         if (buffer.position() > 0) {
           storeMessage(buffer.flip())
         }
-        cancel()
         channel.close()
+        cancel()
       }
     } catch (e: IOException) {
       log("error reading from client: ${e.javaClass}: ${e.message}")
